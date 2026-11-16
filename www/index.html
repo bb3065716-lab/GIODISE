@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>الحاسبة الجيوديزية</title>
+<style>
+  :root{--bg:#0f1a14;--card:#1b2b22;--acc:#c9a227;--txt:#f2f2e8;--mut:#9fb3a6;--ok:#2e7d32}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{margin:0;background:var(--bg);color:var(--txt);font-family:system-ui,"Segoe UI",Tahoma,sans-serif;padding-bottom:30px}
+  header{background:var(--card);padding:14px;text-align:center;border-bottom:3px solid var(--acc)}
+  header h1{margin:0;font-size:19px;color:var(--acc)}
+  header small{color:var(--mut)}
+  nav{display:flex;background:var(--card)}
+  nav button{flex:1;padding:12px 4px;border:0;background:none;color:var(--mut);font-size:14px;font-family:inherit;border-bottom:3px solid transparent}
+  nav button.on{color:var(--acc);border-bottom-color:var(--acc);font-weight:bold}
+  section{display:none;padding:14px}
+  section.on{display:block}
+  label{display:block;margin:10px 0 4px;color:var(--mut);font-size:14px}
+  input[type=text]{width:100%;padding:12px;font-size:18px;border-radius:8px;border:1px solid #3a4f42;background:#0c1510;color:var(--txt);text-align:center;direction:ltr}
+  .row{display:flex;gap:10px}.row>div{flex:1}
+  .go{width:100%;margin-top:16px;padding:14px;font-size:18px;font-weight:bold;border:0;border-radius:10px;background:var(--acc);color:#1a1a1a;font-family:inherit}
+  .out{margin-top:16px;background:var(--card);border-radius:10px;padding:12px;direction:ltr;text-align:left;font-family:Consolas,monospace;font-size:16px;white-space:pre-wrap;line-height:1.7;min-height:20px}
+  .err{color:#ff8a80}
+  .formula{background:var(--card);padding:10px;border-radius:8px;text-align:center;direction:ltr;color:var(--acc);font-size:16px}
+  .opt{display:flex;align-items:center;gap:8px;padding:10px;margin:6px 0;background:var(--card);border-radius:8px;font-size:15px}
+  .opt input{width:20px;height:20px}
+</style>
+</head>
+<body>
+<header><h1>الحاسبة الجيوديزية</h1><small>الدائرة = 60-00 &nbsp;|&nbsp; المسافات بالمتر</small></header>
+<nav>
+  <button class="on" data-t="t1">المباشرة</button>
+  <button data-t="t2">العكسية</button>
+  <button data-t="t3">قانون المليم</button>
+</nav>
+
+<section id="t1" class="on">
+  <div class="row"><div><label>X النقطة A (م)</label><input type="text" id="d_xa" inputmode="decimal"></div>
+  <div><label>Y النقطة A (م)</label><input type="text" id="d_ya" inputmode="decimal"></div></div>
+  <label>الاتجاه الزاوي AB (مليم)</label><input type="text" id="d_al" class="ang" placeholder="مثال: 12-50" inputmode="numeric">
+  <label>المسافة AB (م)</label><input type="text" id="d_d" inputmode="decimal">
+  <button class="go" onclick="runDirect()">احسب</button>
+  <div class="out" id="o1"></div>
+</section>
+
+<section id="t2">
+  <div class="row"><div><label>X النقطة A (م)</label><input type="text" id="i_xa" inputmode="decimal"></div>
+  <div><label>Y النقطة A (م)</label><input type="text" id="i_ya" inputmode="decimal"></div></div>
+  <div class="row"><div><label>X النقطة B (م)</label><input type="text" id="i_xb" inputmode="decimal"></div>
+  <div><label>Y النقطة B (م)</label><input type="text" id="i_yb" inputmode="decimal"></div></div>
+  <button class="go" onclick="runInverse()">احسب</button>
+  <div class="out" id="o2"></div>
+</section>
+
+<section id="t3">
+  <div class="formula">L = D × α / 1000</div>
+  <label class="opt"><input type="radio" name="m" value="L" checked onchange="upd()"> 1) إيجاد العرض L</label>
+  <label class="opt"><input type="radio" name="m" value="D" onchange="upd()"> 2) إيجاد المسافة D</label>
+  <label class="opt"><input type="radio" name="m" value="A" onchange="upd()"> 3) إيجاد الزاوية α (مليم)</label>
+  <div id="gL"><label>L : العرض (م)</label><input type="text" id="m_L" inputmode="decimal"></div>
+  <div id="gD"><label>D : المسافة (م)</label><input type="text" id="m_D" inputmode="decimal"></div>
+  <div id="gA"><label>α : الزاوية (مليم)</label><input type="text" id="m_A" class="ang" placeholder="مثال: 25 أو 0-25" inputmode="numeric"></div>
+  <button class="go" onclick="runMil()">احسب</button>
+  <div class="out" id="o3"></div>
+</section>
+
+<script>
+const MILS = 6000, K = 2 * Math.PI / MILS;
+const $ = id => document.getElementById(id);
+const norm = a => ((a % MILS) + MILS) % MILS;
+const deg = a => a * 360 / MILS;
+const f2 = x => x.toFixed(2);
+// صيغة المدفعية: 1250 مليم -> 12-50 ، 0 -> 0-00 ، 6000 -> 60-00
+function fm(a){
+  a = Math.round(a * 100) / 100;
+  const w = Math.floor(a / 100);
+  const r = Math.round((a - w * 100) * 100) / 100;
+  const ip = Math.floor(r), fr = r - ip;
+  let t = String(ip).padStart(2, '0');
+  if (fr > 1e-9) t += fr.toFixed(2).slice(1).replace(/0+$/, '');
+  return w + '-' + t;
+}
+// قراءة زاوية: تقبل 12-50 أو 1250
+function na(id){
+  const s = $(id).value.trim().replace(',', '.');
+  if (s.includes('-')){
+    const p = s.split('-');
+    if (p.length !== 2 || p[0] === '' || p[1] === '' || isNaN(p[0]) || isNaN(p[1]))
+      throw new Error('صيغة الزاوية غير صحيحة (مثال: 12-50)');
+    return parseFloat(p[0]) * 100 + parseFloat(p[1]);
+  }
+  return n(id);
+}
+// تنسيق تلقائي أثناء الكتابة: 1250 -> 12-50
+document.querySelectorAll('.ang').forEach(el => el.addEventListener('input', () => {
+  const v = el.value;
+  if (/[.,]/.test(v)) return;
+  const d = v.replace(/\D/g, '');
+  if (d.length >= 3) el.value = d.slice(0, -2) + '-' + d.slice(-2);
+  else if (v.includes('-')) el.value = d;
+}));
+
+function n(id){
+  const s = $(id).value.trim().replace(',', '.');
+  if (s === '' || isNaN(s)) throw new Error('أدخل جميع القيم بشكل صحيح');
+  return parseFloat(s);
+}
+function show(id, txt, err){
+  const o = $(id); o.textContent = txt; o.classList.toggle('err', !!err);
+}
+
+document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('nav button').forEach(x => x.classList.remove('on'));
+  document.querySelectorAll('section').forEach(x => x.classList.remove('on'));
+  b.classList.add('on'); $(b.dataset.t).classList.add('on');
+});
+
+function runDirect(){
+  try{
+    const xa = n('d_xa'), ya = n('d_ya'), al = na('d_al'), d = n('d_d');
+    const a = norm(al), r = a * K;
+    const dx = d * Math.sin(r), dy = d * Math.cos(r);
+    show('o1',
+      'α  = ' + fm(a) + '   (' + f2(a) + ' mil | ' + deg(a).toFixed(3) + '°)\n' +
+      'ΔX = ' + f2(dx) + ' m\nΔY = ' + f2(dy) + ' m\n' +
+      '----------------------------\n' +
+      'XB = ' + f2(xa + dx) + ' m\nYB = ' + f2(ya + dy) + ' m');
+  }catch(e){ show('o1', e.message, true); }
+}
+
+function runInverse(){
+  try{
+    const xa = n('i_xa'), ya = n('i_ya'), xb = n('i_xb'), yb = n('i_yb');
+    const dx = xb - xa, dy = yb - ya, d = Math.hypot(dx, dy);
+    if (d === 0) throw new Error('النقطتان متطابقتان');
+    const al = norm(Math.atan2(dx, dy) / K), back = norm(al + MILS / 2);
+    show('o2',
+      'ΔX = ' + f2(dx) + ' m\nΔY = ' + f2(dy) + ' m\n' +
+      '----------------------------\n' +
+      'D(AB)  = ' + f2(d) + ' m\n' +
+      'α(AB)  = ' + fm(al) + '   (' + f2(al) + ' mil | ' + deg(al).toFixed(3) + '°)\n' +
+      'α(BA)  = ' + fm(back) + '   (' + f2(back) + ' mil | ' + deg(back).toFixed(3) + '°)');
+  }catch(e){ show('o2', e.message, true); }
+}
+
+function mode(){ return document.querySelector('input[name=m]:checked').value; }
+function upd(){
+  const m = mode();
+  ['L','D','A'].forEach(k => $('g' + k).style.display = (k === m) ? 'none' : 'block');
+  show('o3', '');
+}
+function runMil(){
+  try{
+    const m = mode();
+    const L = m !== 'L' ? n('m_L') : null;
+    const D = m !== 'D' ? n('m_D') : null;
+    const A = m !== 'A' ? na('m_A') : null;
+    let t;
+    if (m === 'L'){ t = 'L = ' + D + ' × ' + A + ' / 1000\nL = ' + f2(D * A / 1000) + ' m'; }
+    else if (m === 'D'){
+      if (A === 0) throw new Error('القسمة على صفر');
+      t = 'D = ' + L + ' × 1000 / ' + A + '\nD = ' + f2(L * 1000 / A) + ' m';
+    } else {
+      if (D === 0) throw new Error('القسمة على صفر');
+      const a = L * 1000 / D;
+      t = 'α = ' + L + ' × 1000 / ' + D + '\nα = ' + fm(a) + '   (' + f2(a) + ' mil | ' + deg(a).toFixed(3) + '°)';
+    }
+    show('o3', t);
+  }catch(e){ show('o3', e.message, true); }
+}
+upd();
+</script>
+</body>
+</html>
